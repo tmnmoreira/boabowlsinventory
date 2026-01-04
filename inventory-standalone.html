@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventory Manager</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    const { Package, Plus, Trash2, X, Users, Edit2, ChevronUp, ChevronDown, Folder } = lucide;
+
+    // Simple localStorage wrapper to mimic window.storage API
+    const storage = {
+      get: async (key, shared) => {
+        try {
+          const value = localStorage.getItem(key);
+          return value ? { key, value, shared } : null;
+        } catch (e) {
+          throw new Error('Key not found');
+        }
+      },
+      set: async (key, value, shared) => {
+        try {
+          localStorage.setItem(key, value);
+          return { key, value, shared };
+        } catch (e) {
+          return null;
+        }
+      },
+      delete: async (key, shared) => {
+        try {
+          localStorage.removeItem(key);
+          return { key, deleted: true, shared };
+        } catch (e) {
+          return null;
+        }
+      }
+    };
+
+    const InventoryApp = () => {
+      const [user, setUser] = useState(null);
+      const [products, setProducts] = useState([]);
+      const [sections, setSections] = useState(['Food', 'Plasticware', 'Beverages', 'Supplies']);
+      const [inventory, setInventory] = useState({});
+      const [view, setView] = useState('login');
+      const [newProduct, setNewProduct] = useState({ name: '', distributor: '', minQuantity: '', currentQuantity: '', notes: '', section: 'Food' });
+      const [editingProduct, setEditingProduct] = useState(null);
+      const [searchTerm, setSearchTerm] = useState('');
+      const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+      const [showManageUsers, setShowManageUsers] = useState(false);
+      const [showManageSections, setShowManageSections] = useState(false);
+      const [newSection, setNewSection] = useState('');
+      const [newUserForm, setNewUserForm] = useState({ username: '', password: '', name: '', role: 'staff' });
+      const [users, setUsers] = useState([{ id: '1', username: 'admin', password: 'admin123', name: 'Administrator', role: 'admin' }]);
+      const [isLoading, setIsLoading] = useState(true);
+
+      useEffect(() => {
+        loadData();
+      }, []);
+
+      const loadData = async () => {
+        try {
+          const usersResult = await storage.get('users', true);
+          if (usersResult?.value) setUsers(JSON.parse(usersResult.value));
+          
+          const sectionsResult = await storage.get('sections', true);
+          if (sectionsResult?.value) setSections(JSON.parse(sectionsResult.value));
+          
+          const productsResult = await storage.get('products', true);
+          if (productsResult?.value) setProducts(JSON.parse(productsResult.value));
+          
+          const inventoryResult = await storage.get('inventory', true);
+          if (inventoryResult?.value) setInventory(JSON.parse(inventoryResult.value));
+        } catch (error) {
+          console.log('Loading fresh data');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const saveData = async (prods, inv) => {
+        try {
+          if (prods) {
+            await storage.set('products', JSON.stringify(prods), true);
+          }
+          if (inv) {
+            await storage.set('inventory', JSON.stringify(inv), true);
+          }
+        } catch (e) {
+          console.error('Save error:', e);
+          alert('Error saving data: ' + e.message);
+        }
+      };
+
+      const handleLogin = () => {
+        const foundUser = users.find(u => u.username === loginForm.username.trim() && u.password === loginForm.password.trim());
+        if (foundUser) {
+          setUser(foundUser);
+          setView('dashboard');
+          setLoginForm({ username: '', password: '' });
+        } else {
+          alert('Invalid! Use: admin / admin123');
+        }
+      };
+
+      const addUser = async () => {
+        if (!newUserForm.username || !newUserForm.password || !newUserForm.name) return alert('Fill all fields');
+        if (users.find(u => u.username === newUserForm.username)) return alert('Username exists');
+        
+        const newUser = { id: Date.now().toString(), ...newUserForm };
+        const updated = [...users, newUser];
+        setUsers(updated);
+        await storage.set('users', JSON.stringify(updated), true);
+        alert('User: ' + newUser.username + ' Pass: ' + newUser.password);
+        setNewUserForm({ username: '', password: '', name: '', role: 'staff' });
+      };
+
+      const deleteUser = async (id) => {
+        if (id === '1') return alert('Cannot delete admin');
+        if (!confirm('Delete?')) return;
+        const updated = users.filter(u => u.id !== id);
+        setUsers(updated);
+        await storage.set('users', JSON.stringify(updated), true);
+      };
+
+      const addProduct = async () => {
+        if (!newProduct.name || !newProduct.distributor || !newProduct.minQuantity) return alert('Fill required fields');
+        const product = { 
+          id: Date.now().toString(), 
+          name: newProduct.name, 
+          distributor: newProduct.distributor, 
+          minQuantity: parseInt(newProduct.minQuantity), 
+          currentQuantity: newProduct.currentQuantity ? parseInt(newProduct.currentQuantity) : undefined, 
+          notes: newProduct.notes,
+          section: newProduct.section,
+          order: products.filter(p => p.section === newProduct.section).length
+        };
+        const updatedProducts = [...products, product];
+        const updatedInventory = { ...inventory };
+        
+        if (product.currentQuantity !== undefined) {
+          updatedInventory[product.id] = { 
+            quantity: product.currentQuantity, 
+            notes: product.notes, 
+            updatedBy: user.username, 
+            updatedAt: new Date().toISOString() 
+          };
+        }
+        
+        setProducts(updatedProducts);
+        setInventory(updatedInventory);
+        
+        await saveData(updatedProducts, updatedInventory);
+        
+        setNewProduct({ name: '', distributor: '', minQuantity: '', currentQuantity: '', notes: '', section: newProduct.section });
+        alert('Product added successfully!');
+      };
+
+      const updateInventory = async (id, qty, notes) => {
+        const updInv = { ...inventory, [id]: { quantity: parseInt(qty) || undefined, notes: notes || '', updatedBy: user.username, updatedAt: new Date().toISOString() }};
+        const updProds = products.map(p => p.id === id ? { ...p, currentQuantity: parseInt(qty) || undefined, notes } : p);
+        setInventory(updInv);
+        setProducts(updProds);
+        await saveData(updProds, updInv);
+      };
+
+      const deleteProduct = async (id) => {
+        if (!confirm('Delete?')) return;
+        const updProds = products.filter(p => p.id !== id);
+        const updInv = { ...inventory };
+        delete updInv[id];
+        setProducts(updProds);
+        setInventory(updInv);
+        await saveData(updProds, updInv);
+      };
+
+      const editProduct = async () => {
+        if (!editingProduct.name || !editingProduct.distributor || !editingProduct.minQuantity) return alert('Fill required fields');
+        const updProds = products.map(p => p.id === editingProduct.id ? editingProduct : p);
+        setProducts(updProds);
+        await saveData(updProds, inventory);
+        setEditingProduct(null);
+        alert('Product updated!');
+      };
+
+      const moveProduct = async (id, direction) => {
+        const product = products.find(p => p.id === id);
+        const sectionProducts = products.filter(p => p.section === product.section).sort((a, b) => a.order - b.order);
+        const currentIndex = sectionProducts.findIndex(p => p.id === id);
+        
+        if ((direction === 'up' && currentIndex === 0) || (direction === 'down' && currentIndex === sectionProducts.length - 1)) return;
+        
+        const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+        const temp = sectionProducts[currentIndex];
+        sectionProducts[currentIndex] = sectionProducts[newIndex];
+        sectionProducts[newIndex] = temp;
+        
+        const updatedProducts = products.map(p => {
+          if (p.section !== product.section) return p;
+          const idx = sectionProducts.findIndex(sp => sp.id === p.id);
+          return { ...p, order: idx };
+        });
+        
+        setProducts(updatedProducts);
+        await saveData(updatedProducts, inventory);
+      };
+
+      const addSection = async () => {
+        if (!newSection.trim()) return;
+        if (sections.includes(newSection.trim())) return alert('Section already exists');
+        const updated = [...sections, newSection.trim()];
+        setSections(updated);
+        await storage.set('sections', JSON.stringify(updated), true);
+        setNewSection('');
+      };
+
+      const deleteSection = async (section) => {
+        if (products.some(p => p.section === section)) return alert('Cannot delete section with products');
+        if (!confirm('Delete section?')) return;
+        const updated = sections.filter(s => s !== section);
+        setSections(updated);
+        await storage.set('sections', JSON.stringify(updated), true);
+      };
+
+      const generateReport = () => {
+        const toBuy = products.filter(p => {
+          const curr = inventory[p.id]?.quantity ?? p.currentQuantity;
+          return curr !== undefined && curr < p.minQuantity;
+        });
+        return toBuy.reduce((acc, p) => {
+          if (!acc[p.distributor]) acc[p.distributor] = [];
+          const curr = inventory[p.id]?.quantity ?? p.currentQuantity;
+          acc[p.distributor].push({ ...p, currentQuantity: curr, needed: p.minQuantity - curr });
+          return acc;
+        }, {});
+      };
+
+      if (isLoading) return React.createElement('div', { className: "min-h-screen flex items-center justify-center" },
+        React.createElement(Package, { className: "w-16 h-16 text-indigo-600 animate-pulse" })
+      );
+
+      if (view === 'login') {
+        return React.createElement('div', { className: "min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4" },
+          React.createElement('div', { className: "bg-white rounded-lg shadow-xl p-8 max-w-md w-full" },
+            React.createElement('div', { className: "text-center mb-8" },
+              React.createElement(Package, { className: "w-16 h-16 text-indigo-600 mx-auto mb-4" }),
+              React.createElement('h1', { className: "text-3xl font-bold mb-2" }, "Inventory Manager")
+            ),
+            React.createElement('div', { className: "space-y-4" },
+              React.createElement('input', { 
+                type: "text", 
+                value: loginForm.username, 
+                onChange: (e) => setLoginForm({ ...loginForm, username: e.target.value }), 
+                onKeyPress: (e) => e.key === 'Enter' && handleLogin(), 
+                className: "w-full px-4 py-3 border rounded-lg", 
+                placeholder: "Username" 
+              }),
+              React.createElement('input', { 
+                type: "password", 
+                value: loginForm.password, 
+                onChange: (e) => setLoginForm({ ...loginForm, password: e.target.value }), 
+                onKeyPress: (e) => e.key === 'Enter' && handleLogin(), 
+                className: "w-full px-4 py-3 border rounded-lg", 
+                placeholder: "Password" 
+              }),
+              React.createElement('button', { 
+                onClick: handleLogin, 
+                className: "w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700" 
+              }, "Sign In")
+            )
+          )
+        );
+      }
+
+      return React.createElement('div', { className: "min-h-screen bg-gray-50" },
+        React.createElement('header', { className: "bg-white shadow-sm border-b" },
+          React.createElement('div', { className: "max-w-7xl mx-auto px-4 py-4 flex items-center justify-between" },
+            React.createElement('div', { className: "flex items-center gap-3" },
+              React.createElement(Package, { className: "w-8 h-8 text-indigo-600" }),
+              React.createElement('h1', { className: "text-2xl font-bold" }, "Inventory")
+            ),
+            React.createElement('div', { className: "flex items-center gap-4" },
+              React.createElement('span', { className: "text-sm" }, user.name),
+              user.role === 'admin' && React.createElement(React.Fragment, null,
+                React.createElement('button', { onClick: () => setShowManageSections(true), className: "text-sm text-indigo-600" },
+                  React.createElement(Folder, { className: "w-4 h-4 inline mr-1" }), "Sections"
+                ),
+                React.createElement('button', { onClick: () => setShowManageUsers(true), className: "text-sm text-indigo-600" },
+                  React.createElement(Users, { className: "w-4 h-4 inline mr-1" }), "Users"
+                )
+              ),
+              React.createElement('button', { onClick: () => { setUser(null); setView('login'); }, className: "text-sm" }, "Logout")
+            )
+          )
+        ),
+        
+        showManageSections && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" },
+          React.createElement('div', { className: "bg-white rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto" },
+            React.createElement('div', { className: "p-6 border-b flex justify-between items-center" },
+              React.createElement('h2', { className: "text-xl font-bold" }, "Manage Sections"),
+              React.createElement('button', { onClick: () => setShowManageSections(false) },
+                React.createElement(X, { className: "w-6 h-6" })
+              )
+            ),
+            React.createElement('div', { className: "p-6" },
+              React.createElement('div', { className: "mb-6 p-4 bg-gray-50 rounded" },
+                React.createElement('h3', { className: "font-semibold mb-4" }, "Add Section"),
+                React.createElement('div', { className: "flex gap-2" },
+                  React.createElement('input', { 
+                    type: "text", 
+                    value: newSection, 
+                    onChange: (e) => setNewSection(e.target.value), 
+                    placeholder: "Section name", 
+                    className: "flex-1 px-3 py-2 border rounded" 
+                  }),
+                  React.createElement('button', { onClick: addSection, className: "bg-indigo-600 text-white px-6 py-2 rounded" }, "Add")
+                )
+              ),
+              React.createElement('div', { className: "space-y-3" },
+                sections.map(section =>
+                  React.createElement('div', { key: section, className: "flex justify-between items-center p-4 border rounded" },
+                    React.createElement('div', null,
+                      React.createElement('p', { className: "font-semibold" }, section),
+                      React.createElement('p', { className: "text-sm text-gray-500" }, 
+                        products.filter(p => p.section === section).length + ' products'
+                      )
+                    ),
+                    React.createElement('button', { 
+                      onClick: () => deleteSection(section), 
+                      className: "text-red-600 hover:text-red-800" 
+                    }, React.createElement(Trash2, { className: "w-5 h-5" }))
+                  )
+                )
+              )
+            )
+          )
+        ),
+
+        showManageUsers && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" },
+          React.createElement('div', { className: "bg-white rounded-lg max-w-3xl w-full max-h-screen overflow-y-auto" },
+            React.createElement('div', { className: "p-6 border-b flex justify-between items-center" },
+              React.createElement('h2', { className: "text-xl font-bold" }, "Users"),
+              React.createElement('button', { onClick: () => setShowManageUsers(false) },
+                React.createElement(X, { className: "w-6 h-6" })
+              )
+            ),
+            React.createElement('div', { className: "p-6" },
+              React.createElement('div', { className: "mb-6 p-4 bg-gray-50 rounded" },
+                React.createElement('h3', { className: "font-semibold mb-4" }, "Create User"),
+                React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+                  React.createElement('input', { 
+                    type: "text", 
+                    value: newUserForm.username, 
+                    onChange: (e) => setNewUserForm({ ...newUserForm, username: e.target.value }), 
+                    placeholder: "Username", 
+                    className: "px-3 py-2 border rounded" 
+                  }),
+                  React.createElement('input', { 
+                    type: "text", 
+                    value: newUserForm.password, 
+                    onChange: (e) => setNewUserForm({ ...newUserForm, password: e.target.value }), 
+                    placeholder: "Password", 
+                    className: "px-3 py-2 border rounded" 
+                  }),
+                  React.createElement('input', { 
+                    type: "text", 
+                    value: newUserForm.name, 
+                    onChange: (e) => setNewUserForm({ ...newUserForm, name: e.target.value }), 
+                    placeholder: "Full Name", 
+                    className: "px-3 py-2 border rounded" 
+                  }),
+                  React.createElement('select', { 
+                    value: newUserForm.role, 
+                    onChange: (e) => setNewUserForm({ ...newUserForm, role: e.target.value }), 
+                    className: "px-3 py-2 border rounded" 
+                  },
+                    React.createElement('option', { value: "staff" }, "Staff"),
+                    React.createElement('option', { value: "admin" }, "Admin")
+                  )
+                ),
+                React.createElement('button', { 
+                  onClick: addUser, 
+                  className: "mt-4 bg-indigo-600 text-white px-6 py-2 rounded" 
+                }, "Create")
+              ),
+              React.createElement('div', { className: "space-y-3" },
+                users.map(u =>
+                  React.createElement('div', { key: u.id, className: "flex justify-between p-4 border rounded" },
+                    React.createElement('div', null,
+                      React.createElement('p', { className: "font-semibold" }, u.name),
+                      React.createElement('p', { className: "text-sm" }, 
+                        'User: ', React.createElement('span', { className: "font-mono" }, u.username),
+                        ' | Pass: ', React.createElement('span', { className: "font-mono" }, u.password)
+                      ),
+                      React.createElement('p', { className: "text-xs text-gray-500" }, u.role)
+                    ),
+                    u.id !== '1' && React.createElement('button', { 
+                      onClick: () => deleteUser(u.id), 
+                      className: "text-red-600" 
+                    }, React.createElement(Trash2, { className: "w-5 h-5" }))
+                  )
+                )
+              )
+            )
+          )
+        ),
+
+        editingProduct && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" },
+          React.createElement('div', { className: "bg-white rounded-lg max-w-2xl w-full" },
+            React.createElement('div', { className: "p-6 border-b flex justify-between items-center" },
+              React.createElement('h2', { className: "text-xl font-bold" }, "Edit Product"),
+              React.createElement('button', { onClick: () => setEditingProduct(null) },
+                React.createElement(X, { className: "w-6 h-6" })
+              )
+            ),
+            React.createElement('div', { className: "p-6" },
+              React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+                React.createElement('div', null,
+                  React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Name"),
+                  React.createElement('input', { 
+                    type: "text", 
+                    value: editingProduct.name, 
+                    onChange: (e) => setEditingProduct({ ...editingProduct, name: e.target.value }), 
+                    className: "w-full px-3 py-2 border rounded" 
+                  })
+                ),
+                React.createElement('div', null,
+                  React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Distributor"),
+                  React.createElement('input', { 
+                    type: "text", 
+                    value: editingProduct.distributor, 
+                    onChange: (e) => setEditingProduct({ ...editingProduct, distributor: e.target.value }), 
+                    className: "w-full px-3 py-2 border rounded" 
+                  })
+                ),
+                React.createElement('div', null,
+                  React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Min Quantity"),
+                  React.createElement('input', { 
+                    type: "number", 
+                    value: editingProduct.minQuantity, 
+                    onChange: (e) => setEditingProduct({ ...editingProduct, minQuantity: e.target.value }), 
+                    className: "w-full px-3 py-2 border rounded" 
+                  })
+                ),
+                React.createElement('div', null,
+                  React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Section"),
+                  React.createElement('select', { 
+                    value: editingProduct.section, 
+                    onChange: (e) => setEditingProduct({ ...editingProduct, section: e.target.value }), 
+                    className: "w-full px-3 py-2 border rounded" 
+                  },
+                    sections.map(s => React.createElement('option', { key: s, value: s }, s))
+                  )
+                ),
+                React.createElement('div', null,
+                  React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Current Quantity"),
+                  React.createElement('input', { 
+                    type: "number", 
+                    value: editingProduct.currentQuantity || '', 
+                    onChange: (e) => setEditingProduct({ ...editingProduct, currentQuantity: e.target.value }), 
+                    className: "w-full px-3 py-2 border rounded",
+                    placeholder: "Leave empty if unknown"
+                  })
+                ),
+                React.createElement('div', { className: "col-span-2" },
+                  React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Notes"),
+                  React.createElement('textarea', { 
+                    value: editingProduct.notes || '', 
+                    onChange: (e) => setEditingProduct({ ...editingProduct, notes: e.target.value }), 
+                    className: "w-full px-3 py-2 border rounded", 
+                    rows: "3" 
+                  })
+                )
+              ),
+              React.createElement('div', { className: "flex gap-3 mt-6" },
+                React.createElement('button', { 
+                  onClick: editProduct, 
+                  className: "bg-indigo-600 text-white px-6 py-2 rounded" 
+                }, "Save Changes"),
+                React.createElement('button', { 
+                  onClick: () => setEditingProduct(null), 
+                  className: "bg-gray-200 text-gray-700 px-6 py-2 rounded" 
+                }, "Cancel")
+              )
+            )
+          )
+        ),
+
+        React.createElement('div', { className: "max-w-7xl mx-auto px-4 py-8" },
+          React.createElement('div', { className: "flex gap-4 mb-6" },
+            React.createElement('button', { 
+              onClick: () => setView('dashboard'), 
+              className: 'px-4 py-2 rounded font-medium ' + (view === 'dashboard' ? 'bg-indigo-600 text-white' : 'bg-white')
+            }, "Dashboard"),
+            React.createElement('button', { 
+              onClick: () => setView('inventory'), 
+              className: 'px-4 py-2 rounded font-medium ' + (view === 'inventory' ? 'bg-indigo-600 text-white' : 'bg-white')
+            }, "Inventory"),
+            React.createElement('button', { 
+              onClick: () => setView('products'), 
+              className: 'px-4 py-2 rounded font-medium ' + (view === 'products' ? 'bg-indigo-600 text-white' : 'bg-white')
+            }, "Products"),
+            React.createElement('button', { 
+              onClick: () => setView('report'), 
+              className: 'px-4 py-2 rounded font-medium ' + (view === 'report' ? 'bg-indigo-600 text-white' : 'bg-white')
+            }, "Report")
+          ),
+
+          view === 'dashboard' && React.createElement('div', { className: "space-y-6" },
+            React.createElement('div', { className: "grid grid-cols-3 gap-4" },
+              React.createElement('div', { className: "bg-white p-6 rounded shadow" },
+                React.createElement('h3', { className: "text-sm text-gray-600" }, "Products"),
+                React.createElement('p', { className: "text-3xl font-bold text-indigo-600" }, products.length)
+              ),
+              React.createElement('div', { className: "bg-white p-6 rounded shadow" },
+                React.createElement('h3', { className: "text-sm text-gray-600" }, "Low Stock"),
+                React.createElement('p', { className: "text-3xl font-bold text-red-600" }, 
+                  products.filter(p => {
+                    const curr = inventory[p.id]?.quantity ?? p.currentQuantity;
+                    return curr !== undefined && curr < p.minQuantity;
+                  }).length
+                )
+              ),
+              React.createElement('div', { className: "bg-white p-6 rounded shadow" },
+                React.createElement('h3', { className: "text-sm text-gray-600" }, "Distributors"),
+                React.createElement('p', { className: "text-3xl font-bold text-green-600" }, 
+                  new Set(products.map(p => p.distributor)).size
+                )
+              )
+            ),
+            React.createElement('div', { className: "bg-white rounded shadow" },
+              React.createElement('div', { className: "p-6 border-b" },
+                React.createElement('h2', { className: "text-xl font-bold" }, "Overview")
+              ),
+              React.createElement('div', { className: "p-6" },
+                products.length === 0 
+                  ? React.createElement('p', { className: "text-center py-8 text-gray-500" }, "No products")
+                  : sections.map(section => {
+                      const sectionProducts = products.filter(p => p.section === section).sort((a, b) => a.order - b.order);
+                      if (sectionProducts.length === 0) return null;
+                      return React.createElement('div', { key: section, className: "mb-8" },
+                        React.createElement('h3', { className: "text-lg font-bold mb-3 pb-2 border-b-2 border-indigo-600" }, section),
+                        React.createElement('table', { className: "w-full" },
+                          React.createElement('thead', null,
+                            React.createElement('tr', { className: "border-b" },
+                              React.createElement('th', { className: "text-left p-3" }, "Product"),
+                              React.createElement('th', { className: "text-left p-3" }, "Distributor"),
+                              React.createElement('th', { className: "text-left p-3" }, "Current"),
+                              React.createElement('th', { className: "text-left p-3" }, "Min"),
+                              React.createElement('th', { className: "text-left p-3" }, "Status")
+                            )
+                          ),
+                          React.createElement('tbody', null,
+                            sectionProducts.map(p => {
+                              const curr = inventory[p.id]?.quantity ?? p.currentQuantity;
+                              const low = curr !== undefined && curr < p.minQuantity;
+                              return React.createElement('tr', { key: p.id, className: "border-b" },
+                                React.createElement('td', { className: "p-3" }, p.name),
+                                React.createElement('td', { className: "p-3" }, p.distributor),
+                                React.createElement('td', { className: "p-3" }, curr !== undefined ? curr : '—'),
+                                React.createElement('td', { className: "p-3" }, p.minQuantity),
+                                React.createElement('td', { className: "p-3
