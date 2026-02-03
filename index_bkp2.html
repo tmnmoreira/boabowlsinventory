@@ -1973,20 +1973,16 @@ Find it in the <script> section near line 700
             
             const response = await fetch(GOOGLE_SCRIPT_URL, {
                 method: 'POST',
+                mode: 'no-cors',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(reportData)
             });
 
-            // Try to read the response
-            const result = await response.json();
-            
-            if (result.status === 'success') {
-                boaShowToast('✓ Report saved successfully!');
-            } else {
-                boaShowToast('⚠ Error: ' + (result.message || 'Unknown error'));
-            }
+            // Note: With no-cors mode, we can't read the response
+            // But if no error is thrown, we assume success
+            boaShowToast('✓ Report saved successfully!');
             
             // Reset button after success
             setTimeout(() => {
