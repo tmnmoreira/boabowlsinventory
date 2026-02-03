@@ -1932,35 +1932,19 @@ Find it in the <script> section near line 700
         const staffName = document.getElementById('boaStaffName').value || 'Unknown';
         const date = document.getElementById('boaInventoryDate').value;
         
-        // Get ALL items with their current stock levels
-        const inputs = document.querySelectorAll('.boa-stock-input input');
-        const allItems = [];
-        
-        inputs.forEach(input => {
-            const value = parseFloat(input.value);
-            const min = parseFloat(input.dataset.min);
-            const itemName = input.dataset.item;
-            
-            // Only include items that have a value entered
-            if (!isNaN(value)) {
-                const itemData = boaInventoryData.find(item => item.item === itemName);
-                allItems.push({
-                    name: itemData.item,
-                    category: itemData.category,
-                    currentStock: value,
-                    minimumStock: itemData.minimum_stock,
-                    distributor: itemData.distributor,
-                    notes: itemData.notes
-                });
-            }
-        });
-        
         const reportData = {
             timestamp: new Date().toISOString(),
             date: date,
             staffName: staffName,
             lowStockCount: lowStockItems.length,
-            items: allItems  // Send ALL items now, not just low stock
+            items: lowStockItems.map(item => ({
+                name: item.item,
+                category: item.category,
+                currentStock: item.current_stock,
+                minimumStock: item.minimum_stock,
+                distributor: item.distributor,
+                notes: item.notes
+            }))
         };
 
         const saveBtn = document.getElementById('saveReportBtn');
