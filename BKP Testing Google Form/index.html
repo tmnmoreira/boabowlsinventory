@@ -1,3 +1,8 @@
+<!-- Instructions at top of file -->
+<!-- 
+CONFIGURATION: Replace YOUR_GOOGLE_SCRIPT_URL_HERE below with your actual Google Apps Script URL
+Find it in the <script> section near line 700
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -623,108 +628,6 @@
     }
 
     </style>
-    
-    <script>
-    // =============================================
-    // GOOGLE SHEETS CONFIGURATION
-    // =============================================
-    // Replace with your Google Apps Script Web App URL
-    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxYKD286o--TQaBFqeJwgJV1OlfrNGJ8EAItE_bUsvLq0sNP-UvHfwNvfRxWqEHDfDWFQ/exec';
-    
-    // =============================================
-    // SAVE TO GOOGLE SHEETS FUNCTION
-    // =============================================
-    function saveToSheets() {
-        if (GOOGLE_SCRIPT_URL === 'YOUR_SCRIPT_URL_HERE') {
-            boaShowToast('Please configure Google Script URL first!');
-            return;
-        }
-        
-        const staffName = document.getElementById('boaStaffName').value || 'Unknown';
-        const date = document.getElementById('boaInventoryDate').value;
-        
-        // Get ALL items
-        const inputs = document.querySelectorAll('.boa-stock-input input');
-        const needsOrder = [];
-        const wellStocked = [];
-        
-        inputs.forEach(input => {
-            const value = parseFloat(input.value);
-            if (!isNaN(value)) {
-                const min = parseFloat(input.dataset.min);
-                const itemName = input.dataset.item;
-                const itemData = boaInventoryData.find(item => item.item === itemName);
-                
-                const itemText = itemData.item + ' (' + value + '/' + itemData.minimum_stock + ') - ' + 
-                                itemData.distributor + (itemData.notes ? ' - ' + itemData.notes : '');
-                
-                if (value < min) {
-                    needsOrder.push(itemText);
-                } else {
-                    wellStocked.push(itemText);
-                }
-            }
-        });
-        
-        // Format as text
-        const needsOrderText = needsOrder.length > 0 ? needsOrder.join('\n') : 'None';
-        const wellStockedText = wellStocked.length > 0 ? wellStocked.join('\n') : 'None';
-        
-        const saveBtn = document.getElementById('saveBtn');
-        const originalText = saveBtn.textContent;
-        saveBtn.textContent = 'Saving...';
-        saveBtn.disabled = true;
-        
-        // Create iframe for submission
-        let iframe = document.getElementById('save-iframe');
-        if (!iframe) {
-            iframe = document.createElement('iframe');
-            iframe.id = 'save-iframe';
-            iframe.name = 'save-iframe';
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
-        }
-        
-        // Create form
-        let form = document.getElementById('save-form');
-        if (!form) {
-            form = document.createElement('form');
-            form.id = 'save-form';
-            form.method = 'POST';
-            form.action = GOOGLE_SCRIPT_URL;
-            form.target = 'save-iframe';
-            document.body.appendChild(form);
-        }
-        
-        // Clear form
-        form.innerHTML = '';
-        
-        // Add fields
-        const fields = [
-            { name: 'staffName', value: staffName },
-            { name: 'date', value: date },
-            { name: 'needsOrder', value: needsOrderText },
-            { name: 'wellStocked', value: wellStockedText }
-        ];
-        
-        fields.forEach(field => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = field.name;
-            input.value = field.value;
-            form.appendChild(input);
-        });
-        
-        // Submit
-        form.submit();
-        
-        setTimeout(() => {
-            boaShowToast('Report saved to Google Sheets!');
-            saveBtn.textContent = originalText;
-            saveBtn.disabled = false;
-        }, 1500);
-    }
-    </script>
 </head>
 <body>
 
@@ -763,9 +666,9 @@
                 </div>
             </div>
             <div class="button-group">
-                <button class="btn-secondary" onclick="saveToSheets()" id="saveBtn">Save</button>
-                <button class="btn-copy" onclick="boaCopyReportDirect()" id="boaCopyDirectBtn">Copy</button>
-                <button class="btn-primary" onclick="boaOpenSMSModal()">Share</button>
+                <button class="btn-secondary" onclick="saveReportToCloud()" id="saveReportBtn">💾 Save</button>
+                <button class="btn-copy" onclick="boaCopyReportDirect()" id="boaCopyDirectBtn">📋 Copy</button>
+                <button class="btn-primary" onclick="boaOpenSMSModal()">📱 Share</button>
             </div>
         </div>
     </div>
@@ -793,6 +696,14 @@
 
     
     <script>
+
+    // ============================================
+    // CONFIGURATION - IMPORTANT!
+    // ============================================
+    // Replace this URL with your Google Apps Script deployment URL
+    // Instructions: See ONLINE-REPORTS-SETUP-GUIDE.txt
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXb-rh2wcWuTK9ejxiKq4-MqhMzTlcDNGNS7qx3pYJib6vnNFM3tf9UINahj4lkjff/exec';
+    // ============================================
 
     const boaInventoryData = [
         {
@@ -2000,6 +1911,148 @@
             boaCloseSMSModal();
         }
     });
+
+    // ============================================
+    // SAVE REPORT TO GOOGLE SHEETS USING IFRAME
+    // ============================================
+    window.saveReportToCloud = function() {
+        const lowStockItems = boaGetLowStockItems();
+        
+        if (lowStockItems.length === 0) {
+            boaShowToast('✓ All items are well stocked - Nothing to save!');
+            return;
+        }
+
+        if (GOOGLE_SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_URL_HERE') {
+            boaShowToast('⚠ Please configure Google Script URL first!');
+            console.error('Configure GOOGLE_SCRIPT_URL at the top of the script section');
+            return;
+        }
+
+        const staffName = document.getElementById('boaStaffName').value || 'Unknown';
+        const date = document.getElementById('boaInventoryDate').value;
+        
+        // Get ALL items with current stock
+        const inputs = document.querySelectorAll('.boa-stock-input input');
+        const allItems = [];
+        
+        inputs.forEach(input => {
+            const value = parseFloat(input.value);
+            if (!isNaN(value)) {
+                const min = parseFloat(input.dataset.min);
+                const itemName = input.dataset.item;
+                const itemData = boaInventoryData.find(item => item.item === itemName);
+                
+                allItems.push({
+                    name: itemData.item,
+                    category: itemData.category,
+                    currentStock: value,
+                    minimumStock: itemData.minimum_stock,
+                    distributor: itemData.distributor,
+                    notes: itemData.notes
+                });
+            }
+        });
+        
+        const reportData = {
+            timestamp: new Date().toISOString(),
+            date: date,
+            staffName: staffName,
+            lowStockCount: lowStockItems.length,
+            items: allItems
+        };
+
+        const saveBtn = document.getElementById('saveReportBtn');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '⏳ Saving...';
+        saveBtn.disabled = true;
+
+        try {
+            boaShowToast('💾 Saving report to cloud...');
+            
+            // Create hidden iframe for form submission
+            let iframe = document.getElementById('save-iframe');
+            if (!iframe) {
+                iframe = document.createElement('iframe');
+                iframe.id = 'save-iframe';
+                iframe.name = 'save-iframe';
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+            }
+            
+            // Create form
+            let form = document.getElementById('save-form');
+            if (!form) {
+                form = document.createElement('form');
+                form.id = 'save-form';
+                form.method = 'POST';
+                form.action = GOOGLE_SCRIPT_URL;
+                form.target = 'save-iframe';
+                document.body.appendChild(form);
+            }
+            
+            // Clear form
+            form.innerHTML = '';
+            
+            // Add data as hidden input
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'reportData';
+            input.value = JSON.stringify(reportData);
+            form.appendChild(input);
+            
+            // Listen for iframe load (response)
+            iframe.onload = function() {
+                try {
+                    const response = iframe.contentDocument.body.textContent;
+                    if (response.includes('SUCCESS')) {
+                        boaShowToast('✓ Report saved successfully!');
+                    } else if (response.includes('ERROR')) {
+                        boaShowToast('⚠ Error: ' + response);
+                    } else {
+                        boaShowToast('✓ Report sent!');
+                    }
+                } catch (e) {
+                    // Cross-origin - can't read response, but form submitted
+                    boaShowToast('✓ Report saved!');
+                }
+                
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            };
+            
+            // Submit form
+            form.submit();
+            
+            // Timeout fallback
+            setTimeout(() => {
+                if (saveBtn.disabled) {
+                    boaShowToast('✓ Report saved!');
+                    saveBtn.innerHTML = originalText;
+                    saveBtn.disabled = false;
+                }
+            }, 3000);
+
+        } catch (error) {
+            console.error('Error saving report:', error);
+            boaShowToast('⚠ Error saving report. Check console.');
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+        }
+    }
+
+    // ============================================
+    // VIEW REPORTS PAGE LINK (Optional)
+    // ============================================
+    // Uncomment this to add a "View Reports" link at the top
+    // window.addEventListener('DOMContentLoaded', function() {
+    //     const header = document.querySelector('.header');
+    //     const link = document.createElement('a');
+    //     link.href = 'reports.html';
+    //     link.textContent = '📊 View Reports';
+    //     link.style.cssText = 'display:block;text-align:center;margin-top:10px;color:var(--primary);text-decoration:underline;';
+    //     header.appendChild(link);
+    // });
 
     // Initialize on load
     if (document.readyState === 'loading') {
