@@ -629,7 +629,7 @@
     // GOOGLE SHEETS CONFIGURATION
     // =============================================
     // Replace with your Google Apps Script Web App URL
-    const GOOGLE_SCRIPT_URL = 'YOUR_SCRIPT_URL_HERE';
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxYKD286o--TQaBFqeJwgJV1OlfrNGJ8EAItE_bUsvLq0sNP-UvHfwNvfRxWqEHDfDWFQ/exec';
     
     // =============================================
     // SAVE TO GOOGLE SHEETS FUNCTION
@@ -643,8 +643,8 @@
         const staffName = document.getElementById('boaStaffName').value || 'Unknown';
         const date = document.getElementById('boaInventoryDate').value;
         
-        // Get ALL items using the correct selector
-        const inputs = document.querySelectorAll('.stock-input input');
+        // Get ALL items
+        const inputs = document.querySelectorAll('.boa-stock-input input');
         const needsOrder = [];
         const wellStocked = [];
         
@@ -655,15 +655,13 @@
                 const itemName = input.dataset.item;
                 const itemData = boaInventoryData.find(item => item.item === itemName);
                 
-                if (itemData) {
-                    const itemText = itemData.item + ' (' + value + '/' + itemData.minimum_stock + ') - ' + 
-                                    itemData.distributor + (itemData.notes ? ' - ' + itemData.notes : '');
-                    
-                    if (value < min) {
-                        needsOrder.push(itemText);
-                    } else {
-                        wellStocked.push(itemText);
-                    }
+                const itemText = itemData.item + ' (' + value + '/' + itemData.minimum_stock + ') - ' + 
+                                itemData.distributor + (itemData.notes ? ' - ' + itemData.notes : '');
+                
+                if (value < min) {
+                    needsOrder.push(itemText);
+                } else {
+                    wellStocked.push(itemText);
                 }
             }
         });
