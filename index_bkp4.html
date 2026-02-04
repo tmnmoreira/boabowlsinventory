@@ -1971,14 +1971,11 @@ Find it in the <script> section near line 700
         try {
             boaShowToast('💾 Saving report to cloud...');
             
-            // Encode data as URL parameter to avoid CORS issues with POST
-            const dataParam = encodeURIComponent(JSON.stringify(reportData));
-            const url = GOOGLE_SCRIPT_URL + '?action=save&data=' + dataParam;
-            
-            // Use GET request with data in URL
-            const response = await fetch(url, {
-                method: 'GET',
-                redirect: 'follow'
+            // Send with redirect method for CORS
+            const response = await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                redirect: 'follow',
+                body: JSON.stringify(reportData)
             });
 
             // Assume success if no error thrown
