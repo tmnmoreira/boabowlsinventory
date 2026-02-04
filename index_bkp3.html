@@ -1971,15 +1971,22 @@ Find it in the <script> section near line 700
         try {
             boaShowToast('💾 Saving report to cloud...');
             
-            // Send with redirect method for CORS
             const response = await fetch(GOOGLE_SCRIPT_URL, {
                 method: 'POST',
-                redirect: 'follow',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify(reportData)
             });
 
-            // Assume success if no error thrown
-            boaShowToast('✓ Report saved successfully!');
+            // Try to read the response
+            const result = await response.json();
+            
+            if (result.status === 'success') {
+                boaShowToast('✓ Report saved successfully!');
+            } else {
+                boaShowToast('⚠ Error: ' + (result.message || 'Unknown error'));
+            }
             
             // Reset button after success
             setTimeout(() => {
