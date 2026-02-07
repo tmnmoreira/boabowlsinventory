@@ -632,7 +632,7 @@
     const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxYKD286o--TQaBFqeJwgJV1OlfrNGJ8EAItE_bUsvLq0sNP-UvHfwNvfRxWqEHDfDWFQ/exec';
     
     // =============================================
-    // SAVE TO GOOGLE SHEETS FUNCTION - 3 CATEGORIES
+    // SAVE TO GOOGLE SHEETS FUNCTION
     // =============================================
     function saveToSheets() {
         if (GOOGLE_SCRIPT_URL === 'YOUR_SCRIPT_URL_HERE') {
@@ -643,11 +643,10 @@
         const staffName = document.getElementById('boaStaffName').value || 'Unknown';
         const date = document.getElementById('boaInventoryDate').value;
         
-        // Get ALL items using 3 categories
+        // Get ALL items using the correct selector
         const inputs = document.querySelectorAll('.stock-input input');
-        const critical = [];     // 0 stock
-        const warning = [];      // Below minimum but not 0
-        const wellStocked = [];  // At or above minimum
+        const needsOrder = [];
+        const wellStocked = [];
         
         inputs.forEach(input => {
             const value = parseFloat(input.value);
@@ -660,10 +659,8 @@
                     const itemText = itemData.item + ' (' + value + '/' + itemData.minimum_stock + ') - ' + 
                                     itemData.distributor + (itemData.notes ? ' - ' + itemData.notes : '');
                     
-                    if (value === 0) {
-                        critical.push(itemText);
-                    } else if (value < min) {
-                        warning.push(itemText);
+                    if (value < min) {
+                        needsOrder.push(itemText);
                     } else {
                         wellStocked.push(itemText);
                     }
@@ -672,8 +669,7 @@
         });
         
         // Format as text
-        const criticalText = critical.length > 0 ? critical.join('\n') : 'None';
-        const warningText = warning.length > 0 ? warning.join('\n') : 'None';
+        const needsOrderText = needsOrder.length > 0 ? needsOrder.join('\n') : 'None';
         const wellStockedText = wellStocked.length > 0 ? wellStocked.join('\n') : 'None';
         
         const saveBtn = document.getElementById('saveBtn');
@@ -705,12 +701,11 @@
         // Clear form
         form.innerHTML = '';
         
-        // Add fields for 3 categories
+        // Add fields
         const fields = [
             { name: 'staffName', value: staffName },
             { name: 'date', value: date },
-            { name: 'critical', value: criticalText },
-            { name: 'warning', value: warningText },
+            { name: 'needsOrder', value: needsOrderText },
             { name: 'wellStocked', value: wellStockedText }
         ];
         
@@ -1956,10 +1951,6 @@
         const staffName = document.getElementById('boaStaffName').value;
         const date = document.getElementById('boaInventoryDate').value;
         
-        // Separate into CRITICAL (0 stock) and WARNING (low but not 0)
-        const critical = lowStockItems.filter(item => item.current_stock === 0);
-        const warning = lowStockItems.filter(item => item.current_stock > 0);
-        
         let message = `Boa BOWLS - Inventory Alert\n\n`;
         
         if (staffName) {
@@ -1970,60 +1961,28 @@
         }
         message += `\n`;
         
-        message += `${lowStockItems.length} item${lowStockItems.length !== 1 ? 's' : ''} need${lowStockItems.length === 1 ? 's' : ''} restocking\n\n`;
+        message += `📦 ${lowStockItems.length} item${lowStockItems.length !== 1 ? 's' : ''} need${lowStockItems.length === 1 ? 's' : ''} restocking:\n\n`;
 
-        // CRITICAL SECTION (0 stock)
-        if (critical.length > 0) {
-            message += `CRITICAL - OUT OF STOCK (${critical.length})\n`;
-            message += `${'='.repeat(40)}\n`;
-            
-            const criticalByDistributor = {};
-            critical.forEach(item => {
-                if (!criticalByDistributor[item.distributor]) {
-                    criticalByDistributor[item.distributor] = [];
+        const byDistributor = {};
+        lowStockItems.forEach(item => {
+            if (!byDistributor[item.distributor]) {
+                byDistributor[item.distributor] = [];
+            }
+            byDistributor[item.distributor].push(item);
+        });
+
+        Object.entries(byDistributor).forEach(([distributor, items]) => {
+            message += `📍 ${distributor.toUpperCase()}\n`;
+            items.forEach(item => {
+                message += `  • ${item.item}`;
+                message += ` (${item.current_stock}/${item.minimum_stock})`;
+                if (item.notes) {
+                    message += `\n    → ${item.notes}`;
                 }
-                criticalByDistributor[item.distributor].push(item);
-            });
-
-            Object.entries(criticalByDistributor).forEach(([distributor, items]) => {
-                message += `\n${distributor.toUpperCase()}\n`;
-                items.forEach(item => {
-                    message += `  • ${item.item}`;
-                    message += ` (${item.current_stock}/${item.minimum_stock})`;
-                    if (item.notes) {
-                        message += `\n    → ${item.notes}`;
-                    }
-                    message += '\n';
-                });
+                message += '\n';
             });
             message += '\n';
-        }
-
-        // WARNING SECTION (low but not 0)
-        if (warning.length > 0) {
-            message += `WARNING - LOW STOCK (${warning.length})\n`;
-            message += `${'='.repeat(40)}\n`;
-            
-            const warningByDistributor = {};
-            warning.forEach(item => {
-                if (!warningByDistributor[item.distributor]) {
-                    warningByDistributor[item.distributor] = [];
-                }
-                warningByDistributor[item.distributor].push(item);
-            });
-
-            Object.entries(warningByDistributor).forEach(([distributor, items]) => {
-                message += `\n${distributor.toUpperCase()}\n`;
-                items.forEach(item => {
-                    message += `  • ${item.item}`;
-                    message += ` (${item.current_stock}/${item.minimum_stock})`;
-                    if (item.notes) {
-                        message += `\n    → ${item.notes}`;
-                    }
-                    message += '\n';
-                });
-            });
-        }
+        });
 
         return message;
     }
