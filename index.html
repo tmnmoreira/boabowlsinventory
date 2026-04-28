@@ -203,13 +203,7 @@
         border-radius: 4px;
         white-space: nowrap;
     }
-
-    body .item-notes {
-        font-size: 0.8rem;
-        color: var(--text-secondary);
-        font-style: italic;
-    }
-
+    
     body .stock-input {
         display: flex;
         align-items: center;
@@ -1915,9 +1909,9 @@
                     message += '\n';
                 });
             });
-            message += '\n';
-        }
-
+//            message += '\n';
+//        }
+//
         // WARNING SECTION (low but not 0)
         if (warning.length > 0) {
             message += `WARNING - LOW STOCK (${warning.length})\n`;
@@ -1942,9 +1936,9 @@
                     message += '\n';
                 });
             });
-        }
-
-        return message;
+//        }
+//
+//        return message;
     }
 
     function boaShowToast(message) {
